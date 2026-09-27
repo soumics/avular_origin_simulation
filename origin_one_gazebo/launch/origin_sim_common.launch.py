@@ -11,7 +11,7 @@ import os
 from launch import LaunchDescription
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
 from launch.conditions import IfCondition, UnlessCondition
 from launch.actions import (
     ExecuteProcess,
@@ -28,7 +28,11 @@ import xacro
 def generate_launch_description():
     ld = LaunchDescription()
 
+    # All nodes run on Gazebo's /clock
+    ld.add_action(SetParameter(name="use_sim_time", value=True))
+
     ld.add_action(DeclareLaunchArgument("headless", default_value="false"))
+    ld.add_action(DeclareLaunchArgument("rviz", default_value="false"))
     ld.add_action(DeclareLaunchArgument("spawn", default_value="true"))
     ld.add_action(DeclareLaunchArgument("world", default_value="TY_test_area.world"))
     ld.add_action(DeclareLaunchArgument("drive_configuration", default_value="skid_steer_drive"))
@@ -47,12 +51,14 @@ def generate_launch_description():
     ros_gz_sim = get_package_share_directory("ros_gz_sim")
     pkg_dir = get_package_share_directory("origin_one_gazebo")
     pkg_dir_origin_description = get_package_share_directory("origin_one_description")
-    xacro_file_path = "urdf/origin_one.urdf.xacro"
+    xacro_file_path = "urdf/origin_one_gz.urdf.xacro"
 
-    os.environ["IGN_GAZEBO_RESOURCE_PATH"] = (
-        os.path.join(pkg_dir, "models")
-        + os.pathsep
-        + os.path.join(pkg_dir_origin_description, "..")
+    os.environ["GZ_SIM_RESOURCE_PATH"] = os.pathsep.join(
+        filter(None, [
+            os.path.join(pkg_dir, "models"),
+            os.path.join(pkg_dir_origin_description, ".."),
+            os.environ.get("GZ_SIM_RESOURCE_PATH", ""),
+        ])
     )
 
     world = PathJoinSubstitution([pkg_dir, "worlds", LaunchConfiguration("world")])
@@ -71,7 +77,7 @@ def generate_launch_description():
 
     ld.add_action(
         ExecuteProcess(
-            cmd=["ign", "gazebo", "-g", "-v1"],
+            cmd=["gz", "sim", "-g", "-v1"],
             condition=UnlessCondition(LaunchConfiguration("headless")),
         )
     )
@@ -82,7 +88,7 @@ def generate_launch_description():
 
     # Function to create the URDF description from the Xacro file
     def create_urdf_description(context):
-        xacro_file = os.path.join(FindPackageShare("origin_one_description").find("origin_one_description"), xacro_file_path)
+        xacro_file = os.path.join(FindPackageShare("origin_one_gazebo").find("origin_one_gazebo"), xacro_file_path)
         drive_configuration = LaunchConfiguration('drive_configuration').perform(context)
         urdf = xacro.process_file(xacro_file, mappings={"drive_configuration": drive_configuration}).toxml()
         return [SetLaunchConfiguration('urdf', urdf)]
@@ -250,6 +256,16 @@ def generate_launch_description():
                 "os_lidar",
             ],
             output="screen",
+        )
+    )
+
+    ld.add_action(
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            arguments=["-d", PathJoinSubstitution([pkg_dir, "rviz", "origin_one_sim.rviz"])],
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("rviz")),
         )
     )
 

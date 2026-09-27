@@ -25,6 +25,10 @@ data_files.extend(
         # Path to the world file
         (os.path.join("share", package_name, "worlds/"), glob("./worlds/*")),
         # (os.path.join('share', package_name,'models/'), glob('./models/**/*.*', recursive=True)),
+        # Path to the Gazebo robot overlay
+        (os.path.join("share", package_name, "urdf/"), glob("./urdf/*")),
+        # Path to the RViz config
+        (os.path.join("share", package_name, "rviz/"), glob("./rviz/*")),
         # Path to the config files
         (os.path.join("share", package_name, "config/"), glob("./config/*")),
     ]
