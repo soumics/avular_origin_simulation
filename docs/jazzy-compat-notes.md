@@ -124,7 +124,60 @@ stand-in, if needed, can be built from stock packages (`twist_mux` +
   the real robot, which uses `cmd_vel_controller` on board.
 - Confirm the licence status of `origin_msgs` (repo is MIT, `package.xml` says
   "Avular Confidential").
-- Upstream simulation targets Gazebo Fortress (`IGN_GAZEBO_RESOURCE_PATH`,
-  Fortress-era `ros_gz`). Jazzy ships Gazebo Harmonic, so the launch and SDF
-  changes are part of the Gazebo simulation baseline work, not of this
-  diagnosis.
+
+## Gazebo Harmonic port (simulation baseline)
+
+**Upstream `main` + `main` does not simulate on any distro.**
+`origin_one_description` 2.0.0 (commit `4d247b8`, 2026-07-02) removed every
+Gazebo plugin and sensor from `origin_one.urdf.xacro`. Its CHANGELOG says they
+move to `avular_origin_simulation` and an `avular_simulations` repo. That repo
+is not public, and `avular_origin_simulation` `main` (2026-02) never received
+them. Spawned as-is, the robot has no drive, odometry, lidar or camera.
+
+What changed on `ros2-jazzy`:
+
+- **`origin_one_gazebo/urdf/origin_one_gz.urdf.xacro` (new).** It
+  `xacro:include`s the unmodified description xacro and adds back the Gazebo
+  blocks from `origin_one_description` 1.x (commit `051deab`): the Sensors and
+  NavSat systems, wheel friction, the Ouster `gpu_lidar`, the Realsense
+  `rgbd_camera`, the `navsat` sensor, JointStatePublisher and
+  DiffDrive/MecanumDrive/OdometryPublisher. Plugin names are ported
+  `ignition-gazebo-*` → `gz-sim-*` and `ignition::gazebo::` → `gz::sim::`.
+  Links and frames honor the 2.0.0 `prefix` argument. The noise blocks now use
+  the SDF `<type>` element, because the old `type=` attribute is ignored.
+- **`launch/origin_sim_common.launch.py`:**
+  - spawns the overlay xacro instead of the bare description;
+  - sets `GZ_SIM_RESOURCE_PATH` (was `IGN_GAZEBO_RESOURCE_PATH`) and prepends
+    rather than overwriting the value set by the description's environment hook;
+  - uses `gz sim -g` (was `ign gazebo -g`);
+  - sets a global `use_sim_time:=true`;
+  - adds a `rviz:=true` argument.
+- **`worlds/TY_test_area.world`:** world system plugins renamed to `gz-sim-*`.
+- **`rviz/origin_one_sim.rviz` (new):** a copy of the stock description config
+  plus the Ouster `PointCloud2`, the camera `Image` and `Odometry`, with fixed
+  frame `odom`.
+- **`setup.py` / `package.xml`:** installs `urdf/` and `rviz/`; adds
+  `exec_depend` on `rviz2` and `xacro`.
+
+Verified 2026-09-27 in `osrf/ros:jazzy-desktop-full` (Gazebo Harmonic 8.11,
+`ros_gz` 1.0.22), real-time factor 1.0:
+
+- `colcon build --symlink-install`: both packages build.
+- `gz sdf -p` on the overlay: valid for all four drive configurations. The
+  only warnings are the expected `gz_frame_id` notices.
+- The robot spawns. `/robot/cmd_vel` drives it: skid-steer at 0.5 m/s
+  forward with a 0.3 rad/s turn, and mecanum strafing at 0.5 m/s sideways.
+- The TF chain `odom → base_link → main_body → ouster_base → os_sensor → os_lidar`,
+  plus the camera and GNSS frames, is complete.
+- `/robot/lidar/points`: 1024×32, frame `os_lidar`, about 10 Hz.
+  `/robot/camera/color/image_raw`: about 6 Hz. Odometry: 50 Hz. Joint states: 100 Hz.
+- RViz shows the robot model, the live Ouster cloud and the camera image.
+
+Behaviour notes (same as upstream Fortress):
+
+- DiffDrive and MecanumDrive have no command timeout. The robot keeps
+  executing the last `/robot/cmd_vel` until it receives a zero Twist.
+- In `mecanum_drive`, odometry comes from OdometryPublisher, which reports the
+  world pose, so `/robot/odom` starts at the spawn pose, not at (0, 0). With
+  DiffDrive it starts at (0, 0).
+- `static_transform_publisher` warns about old-style arguments. This is cosmetic.
