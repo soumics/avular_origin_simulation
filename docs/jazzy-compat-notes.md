@@ -46,6 +46,28 @@ without the `.deb`s**: `colcon build --symlink-install` succeeds for both packag
 dependencies (every `ros-humble-*` entry, plus `cmake-avular`,
 `ament-copyright-avular`, `libfmt8` and `libpython3.10`).
 
+### Control check: the same `.deb`s on Humble
+
+In `osrf/ros:humble-desktop-full`, all `ros-humble-*` dependencies resolve.
+Only `cmake-avular` and `ament-copyright-avular` are missing. They look like
+build/lint tooling declared as runtime `Depends:`, so the README's
+`sudo apt install ./*.deb` fails on a clean Humble install too. The workaround
+works:
+
+```bash
+sudo apt install libfmt-dev ros-humble-diagnostic-updater ros-humble-ament-cmake-pytest \
+  ros-humble-launch-testing-ament-cmake ros-humble-ament-cmake-gtest ros-humble-ament-lint-auto
+sudo dpkg -i --ignore-depends=cmake-avular,ament-copyright-avular \
+  loggercxx_3.3.0_amd64.deb rclcpp-avular_3.3.0_amd64.deb origin-msgs_2.3.0_amd64.deb \
+  cmd-vel-controller_1.7.2_amd64.deb rclcpp-mocks_3.3.1_amd64.deb
+```
+
+After that, `ldd` reports no missing libraries. `cmd_vel_controller` runs with
+`origin_one_gazebo/config/cmd_vel_controller.yaml` and brings up
+`/robot/cmd_vel`, `/robot/control_mode` and the
+`set_control_mode` / `reset_control_mode` / `previous_control_mode` services.
+So the binaries are fine; the incompatibility is purely Humble vs Jazzy.
+
 ## Upstream availability (checked 2026-09-27)
 
 - `avular-robotics` GitHub org: no Jazzy branches, tags or releases in
