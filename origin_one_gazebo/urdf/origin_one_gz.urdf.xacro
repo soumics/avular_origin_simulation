@@ -124,7 +124,7 @@
     <sensor name="realsense_d435" type="rgbd_camera">
       <gz_frame_id>${P}camera_link</gz_frame_id>
       <topic>/robot/camera</topic>
-      <update_rate>6</update_rate>
+      <update_rate>15</update_rate>  <!-- real D435: up to 30 fps -->
       <camera name="camera">
         <horizontal_fov>1.0472</horizontal_fov>
         <lens>
